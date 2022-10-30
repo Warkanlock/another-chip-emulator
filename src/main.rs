@@ -1,5 +1,5 @@
 mod cpu;
 
 fn main() {
-    println!("Hello, world")
+    print!("CHIP-8 Emulator")
 }

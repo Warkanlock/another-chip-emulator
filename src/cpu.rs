@@ -74,6 +74,7 @@ impl MainCPU {
         created_cpu
     }
 
+    // main loop
     pub fn emulate() {
         // fetch operation
         // decode operation
@@ -82,21 +83,45 @@ impl MainCPU {
         // update timers
     }
 
+    // execution
+    fn fetch_operation(&mut self) -> u16 {
+        /*
+            Set current operation code as the result of merging two pieces of memory together
+        */
+        self.operation_code = self.merge_opcode(
+            self.memory[self.program_counter],
+            self.memory[self.program_counter + 1],
+        );
+        // increase program counter to match new instruction
+        self.program_counter += 1;
+        self.operation_code
+    }
+    fn decode_operation() {}
+    fn execute_operation() {}
+
+    // memory manipulation
+
+    fn load_program(&mut self, memory: &[u8]) {
+        // load program into memory
+        for byte in memory {
+            self.load_byte(*byte);
+        }
+        // reset program counter
+        self.program_counter = 0x200;
+    }
+
+    fn load_byte(&mut self, value: u8) {
+        self.memory[self.program_counter] = value;
+        self.program_counter += 1;
+    }
+
+    // utils
     fn set_font_system(cpu: &mut MainCPU) {
         for i in (std::ops::Range { start: 0, end: 80 }) {
             // allocate in the memory fonts utilized later
             cpu.memory[i] = FONTSET[i];
         }
     }
-    fn fetch_operation(&self) -> u16 {
-        self.merge_opcode(
-            self.memory[self.program_counter],
-            self.memory[self.program_counter + 1],
-        )
-    }
-    fn decode_operation() {}
-    fn execute_operation() {}
-
     fn merge_opcode(&self, first: u8, second: u8) -> u16 {
         /*
             Merge both u8 and convert it to u16
@@ -147,6 +172,24 @@ mod tests {
     }
 
     #[test]
+    fn should_load_into_memory() {
+        let mut cpu = MainCPU::new();
+
+        // sample instruction
+        let instruction: [u8; 2] = [0x10, 0x00];
+
+        // load to memory a piece of memory
+        cpu.load_program(&instruction);
+
+        // operation code must be the merge
+        // in between two pieces of memory in u8
+        let operation_code = cpu.fetch_operation();
+
+        // op code must be 0x1000, which later we can decode and execute
+        assert_eq!(operation_code, 0x1000)
+    }
+
+    #[test]
     fn should_merge_two_bytes() {
         // arrange
         let first: u8 = 0xAA;
@@ -157,6 +200,15 @@ mod tests {
         let result = instantiate_cpu.merge_opcode(first, second);
 
         assert_eq!(result, 0xAAFF);
+    }
+
+    #[test]
+    fn should_return_operation_code() {
+        let mut instantiate_cpu = MainCPU::new();
+
+        let operation_code = instantiate_cpu.fetch_operation();
+
+        assert_eq!(operation_code, 0x0001)
     }
 
     #[test]
