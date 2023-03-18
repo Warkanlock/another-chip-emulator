@@ -49,7 +49,9 @@ pub struct MainCPU {
     stack_pointer: usize,   // 2 bytes
 
     // stack
-    stack: Vec<u16>, // 2 bytes
+    stack: Vec<u16>,   // 2 bytes
+    base_hex: u16,     // to get value from operation code
+    identity_hex: u16, // to get identity from operation code
 }
 
 #[allow(dead_code)]
@@ -60,6 +62,10 @@ impl MainCPU {
             operation_code: 0x000,
             memory: allocate_memory::<u8>(4096),
             virtual_registers: allocate_memory::<u8>(16),
+
+            // base operands (from an opcode as 0xABCD we can get A as identity and BCD as base)
+            base_hex: 0x0FFF, // to get value from operation code (isolate first-three bits)
+            identity_hex: 0xF000, // to get identity from operation code (isolate left-most bit)
 
             // usize elements, grows as memory allows it (64 bit will be 8 bytes)
             index: 0x000,
@@ -74,30 +80,54 @@ impl MainCPU {
         created_cpu
     }
 
+    fn log(&mut self, variant: &str, text: String) {
+        println!("{}", format!("[{}] - {}", variant, text))
+    }
+
     // main loop
     pub fn emulate() {
         // fetch operation
         // decode operation
         // execute operation
-
         // update timers
     }
 
     // execution
     fn fetch_operation(&mut self) -> u16 {
-        /*
-            Set current operation code as the result of merging two pieces of memory together
-        */
+        // set current operation code as the result of merging two pieces of memory together
         self.operation_code = self.merge_opcode(
             self.memory[self.program_counter],
             self.memory[self.program_counter + 1],
         );
+
         // increase program counter to match new instruction
         self.program_counter += 1;
+
+        self.log(
+            "info",
+            format!("fetched operation code -> 0x{:X}", self.operation_code), // this way we print it as hex
+        );
+
+        // return resultant operation code
         self.operation_code
     }
-    fn decode_operation() {}
-    fn execute_operation() {}
+
+    fn decode_operation(&mut self) {
+        self.log(
+            "info",
+            format!("decoding operation code -> 0x{:X}", self.operation_code),
+        );
+        let hex_result: u16 = self.operation_code & self.identity_hex;
+        match hex_result {
+            0x1000 => self.log(
+                "action",
+                format!("jumping to {}", self.operation_code & self.base_hex), // jump to the difference of operation code & 0x0FFF
+            ),
+            _ => self.log("error", format!("no action implemented yet for this code")),
+        }
+    }
+
+    fn execute_operation(&mut self) {}
 
     // memory manipulation
 
@@ -190,6 +220,27 @@ mod tests {
     }
 
     #[test]
+    fn fetch_decode_execute() {
+        let mut cpu = MainCPU::new();
+
+        // sample instruction
+        let instruction: [u8; 2] = [0x10, 0x00];
+
+        // load to memory a piece of memory
+        cpu.load_program(&instruction);
+
+        // operation code must be the merge
+        // in between two pieces of memory in u8
+        let operation_code = cpu.fetch_operation();
+
+        // decoding the operation (and executing it)
+        cpu.decode_operation();
+
+        // op code must be 0x1000, which later we can decode and execute
+        assert_eq!(operation_code, 0x1000)
+    }
+
+    #[test]
     fn should_merge_two_bytes() {
         // arrange
         let first: u8 = 0xAA;
@@ -208,7 +259,7 @@ mod tests {
 
         let operation_code = instantiate_cpu.fetch_operation();
 
-        assert_eq!(operation_code, 0x0001)
+        assert_eq!(operation_code, 0x0000)
     }
 
     #[test]
