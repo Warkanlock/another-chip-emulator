@@ -1,7 +1,9 @@
 extern crate num;
 
+use colored::*;
 use num::{Integer, Zero};
 
+// helper to allocate memory
 pub fn allocate_memory<T>(_len: usize) -> Vec<T>
 where
     T: Clone + Integer,
@@ -80,19 +82,47 @@ impl MainCPU {
         created_cpu
     }
 
-    fn log(&mut self, variant: &str, text: String) {
-        println!("{}", format!("[{}] - {}", variant, text))
+    // this method will help us to log only CPU events
+    // that's why it's on utils or anything similar
+    pub fn log(&mut self, variant: &str, text: String) {
+        match variant {
+            "info" => println!("{}", format!("[{}] - {}", variant.blue(), text)),
+            "warning" => println!("{}", format!("[{}] - {}", variant.yellow(), text)),
+            "error" => println!("{}", format!("[{}] - {}", variant.red(), text)),
+            "action" => println!("{}", format!("[{}] - {}", variant.green(), text)),
+            _ => println!("{}", format!("[{}] - {}", variant.blue(), text)),
+        }
     }
 
     // main loop
-    pub fn emulate() {
+    pub fn emulate(&mut self) -> i8 {
+        self.log(
+            "info",
+            format!(
+                "stack: 0x{:X} | program counter: 0x{:X}",
+                self.stack_pointer, self.program_counter
+            ),
+        );
+
+        if self.program_counter == 0x0010 {
+            self.log(
+                "warning",
+                "use stdin input to shutdown the emulator".to_string(),
+            );
+
+            return -1; // break program
+        };
+
         // fetch operation
-        // decode operation
-        // execute operation
-        // update timers
+        self.fetch_operation();
+        // decode + execute operation
+        self.decode_operation();
+
+        // not implemented yet, update timers for graphic purposes
+        return 1;
     }
 
-    // execution
+    // fetch
     fn fetch_operation(&mut self) -> u16 {
         // set current operation code as the result of merging two pieces of memory together
         self.operation_code = self.merge_opcode(
@@ -112,26 +142,46 @@ impl MainCPU {
         self.operation_code
     }
 
+    // decode
     fn decode_operation(&mut self) {
         self.log(
             "info",
             format!("decoding operation code -> 0x{:X}", self.operation_code),
         );
-        let hex_result: u16 = self.operation_code & self.identity_hex;
-        match hex_result {
+
+        // we read the identifier of the desire action provided by the opcode
+        let identifier: u16 = self.operation_code & self.identity_hex;
+
+        // we capture the value
+        let value: u16 = self.operation_code & self.base_hex;
+
+        // read more about identifiers: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
+        match identifier {
+            0x0000 => match value {
+                0x0010 => {
+                    self.program_counter = 0x0010;
+                    self.log("action", "exiting program".to_string())
+                }
+                _ => self.log("error", format!("no action implemented yet for this code")),
+            },
             0x1000 => self.log(
                 "action",
-                format!("jumping to {}", self.operation_code & self.base_hex), // jump to the difference of operation code & 0x0FFF
+                format!("jumping to {}", value), // jump to the difference of operation code & 0x0FFF
             ),
+            0x2000 => self.log("action", format!("call to subroutine at {}", value)),
             _ => self.log("error", format!("no action implemented yet for this code")),
+        }
+
+        if self.program_counter != 0x0010 {
+            self.program_counter += 1;
         }
     }
 
+    // not implemented yet, decode will call it
     fn execute_operation(&mut self) {}
 
     // memory manipulation
-
-    fn load_program(&mut self, memory: &[u8]) {
+    pub fn load_program(&mut self, memory: &[u8]) {
         // load program into memory
         for byte in memory {
             self.load_byte(*byte);
@@ -220,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn fetch_decode_execute() {
+    fn fetch_decode_execute_jump() {
         let mut cpu = MainCPU::new();
 
         // sample instruction
@@ -238,6 +288,41 @@ mod tests {
 
         // op code must be 0x1000, which later we can decode and execute
         assert_eq!(operation_code, 0x1000)
+    }
+
+    #[test]
+    fn fetch_decode_execute_call() {
+        let mut cpu = MainCPU::new();
+
+        // sample instruction
+        let instruction: [u8; 2] = [0x20, 0x00];
+
+        // load to memory a piece of memory
+        cpu.load_program(&instruction);
+
+        // operation code must be the merge
+        // in between two pieces of memory in u8
+        let operation_code = cpu.fetch_operation();
+
+        // decoding the operation (and executing it)
+        cpu.decode_operation();
+
+        // op code must be 0x1000, which later we can decode and execute
+        assert_eq!(operation_code, 0x2000)
+    }
+
+    #[test]
+    fn evaluate_loop() {
+        let mut cpu = MainCPU::new();
+
+        // jump + call routine
+        let instruction: [u8; 4] = [0x10, 0x00, 0x20, 0x00];
+
+        // load into memory
+        cpu.load_program(&instruction);
+
+        // emulate loop to avoid calling operations by hand
+        cpu.emulate();
     }
 
     #[test]
