@@ -1,5 +1,7 @@
 extern crate num;
 
+use std::{fs::File, io::Read};
+
 use colored::*;
 use num::{Integer, Zero};
 
@@ -99,8 +101,8 @@ impl MainCPU {
         self.log(
             "info",
             format!(
-                "stack: 0x{:X} | program counter: 0x{:X}",
-                self.stack_pointer, self.program_counter
+                "stack: {} | program counter: 0x{:X} | previous operation code: 0x{:X}",
+                self.stack_pointer, self.program_counter, self.operation_code
             ),
         );
 
@@ -162,32 +164,86 @@ impl MainCPU {
                     self.program_counter = 0x0010;
                     self.log("action", "exiting program".to_string())
                 }
+                0x00E0 => self.clean_display(),
+                0x00EE => self.return_from_subroutine(),
                 _ => self.log("error", format!("no action implemented yet for this code")),
             },
-            0x1000 => self.log(
-                "action",
-                format!("jumping to {}", value), // jump to the difference of operation code & 0x0FFF
-            ),
-            0x2000 => self.log("action", format!("call to subroutine at {}", value)),
+            0x1000 => self.jp_to_addr(value),
+            0x2000 => self.call_subroutine(value),
             _ => self.log("error", format!("no action implemented yet for this code")),
         }
 
         if self.program_counter != 0x0010 {
             self.program_counter += 1;
-        }
+        } 
     }
 
-    // not implemented yet, decode will call it
-    fn execute_operation(&mut self) {}
+    fn return_from_subroutine(&mut self) {
+        self.log("action", "returning from subroutine".to_string());
+
+        // TODO: implement this action
+
+        // we decrement the stack pointer
+        // self.stack_pointer -= 1;
+        
+        // we set the program counter to the top of the stack
+        // self.program_counter = self.stack[self.stack_pointer] as usize;
+    }
+
+    fn clean_display(&mut self) {
+        print!("\x1B[2J\x1B[1;1H");
+        self.log("action", "cleaning screen".to_string());
+    }
+
+    fn jp_to_addr(&mut self, addr: u16) {
+        self.log("action", format!("jumping to {}", addr));
+
+        // set program counter to the address
+        self.program_counter = addr as usize;
+    }
+
+    fn call_subroutine(&mut self, addr: u16) {
+        self.log("action", format!("calling subroutine at {}", addr));
+
+        // we increment the stack pointer
+        self.stack_pointer += 1;
+
+        // current program counter on top of the stack
+        self.stack[self.stack_pointer] = self.program_counter as u16;
+
+        // program counter set to the address
+        self.program_counter = addr as usize;
+    }
 
     // memory manipulation
     pub fn load_program(&mut self, memory: &[u8]) {
+        self.log("action", "inserting program into memory".to_string());
+        self.log("action", format!("program size: {}", memory.len()));
+
         // load program into memory
         for byte in memory {
             self.load_byte(*byte);
         }
         // reset program counter
         self.program_counter = 0x200;
+    }
+
+    pub fn load_rom(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // read from file
+        let mut file = File::open(path)?;
+
+        self.log("action", "ROM opened".to_string());
+
+        let mut buffer: Vec<u8> = Vec::new();
+
+        file.read_to_end(&mut buffer)?;
+
+        self.log("action", format!("reading ROM from {}", path));
+
+        // load program into memory
+        self.load_program(&buffer);
+
+        Ok(())
     }
 
     fn load_byte(&mut self, value: u8) {
@@ -361,5 +417,27 @@ mod tests {
         // assert
         assert_eq!(memory_allocated[0], 0x000);
         assert_eq!(memory_allocated[2], expected_value);
+    }
+
+    #[test]
+    fn load_rom() {
+        let mut cpu = MainCPU::new();
+
+        // use path
+        let chip8_rom = "roms/hello/HELLO.ch8";
+
+        // load from path
+        cpu.load_rom(chip8_rom).unwrap();
+
+        // assert instructions ( increment counter by hand so we avoid decoding )
+        assert_eq!(cpu.fetch_operation(), 0x6005);
+        cpu.program_counter += 1;
+        assert_eq!(cpu.fetch_operation(), 0x6105);
+        cpu.program_counter += 1;
+        assert_eq!(cpu.fetch_operation(), 0x8014);
+        cpu.program_counter += 1;
+        assert_eq!(cpu.fetch_operation(), 0x00E0); // this will clean the screan
+        cpu.program_counter += 1;
+        assert_eq!(cpu.fetch_operation(), 0x00EE);
     }
 }

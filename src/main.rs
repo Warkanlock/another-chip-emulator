@@ -7,11 +7,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // instantiate cpu
     let mut cpu = MainCPU::new();
 
-    // jump to 0x0001 + call routine + exit (0x0010)
-    let instruction: [u8; 6] = [0x10, 0x00, 0x20, 0x00, 0x00, 0x10];
+    // read input from parameter
+    let args: Vec<String> = std::env::args().collect();
+    let rom_name = &args[1];
 
-    // load program into memory
-    cpu.load_program(&instruction);
+    // jump to 0x0001 + call routine + exit (0x0010)
+    let path = format!("roms/{}/{}.ch8", rom_name, rom_name.to_uppercase());
+
+    cpu.log("info", format!("Loading ROM: {}", path));
+
+    cpu.load_rom(&path)?;
 
     // run program
     loop {
